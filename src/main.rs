@@ -204,9 +204,18 @@ fn main() {
         let config_content = read_to_string("config.toml");
         match config_content {
             Ok(toml) => {
-                config = toml::from_str(toml.as_str()).unwrap();
+                match toml::from_str(toml.as_str()) {
+                    Ok(v) => config = v,
+                    Err(e) => {
+                        println!("配置解析失败： {}", e.to_string());
+                        exit(1);
+                    }
+                }
             },
-            Err(e) => panic!(e)
+            Err(e) => {
+                println!("读取配置文件失败： {}", e.to_string());
+                exit(1);
+            }
         };
     }
 
