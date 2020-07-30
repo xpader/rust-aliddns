@@ -17,6 +17,7 @@ use rand::prelude::*;
 use urlencoding::encode as url_encode;
 
 use serde::Deserialize;
+use core::panicking::panic;
 
 struct Aliyun {
     api_id: String,
@@ -115,7 +116,12 @@ impl Aliyun {
         let url = format!("https://alidns.aliyuncs.com/?{}", query_str);
         let resposne = fetch(&url);
 
-        json::parse(&resposne).unwrap()
+        let ret = json::parse(&resposne).unwrap();
+        if !ret["Code"].is_null() {
+            panic!(format!("接口 {} 调用失败： {}, {}", data.get("Action").unwrap(), ret["Code"], ret["Message"]));
+        }
+
+        ret
     }
 
     pub fn get_record_id(&self, sub_domain: &String) -> JsonValue {
@@ -275,11 +281,6 @@ fn main() {
         println!("没有找到 {} 的解析记录，添加新记录。", domain_full);
         ali.add_record(&config.domain, &config.domain_sub, &current_ip, ttl)
     };
-
-    if !record_ret["Code"].is_null() {
-        println!("设置解析失败： {}, {}", record_ret["Code"], record_ret["Message"]);
-        exit(0);
-    }
 
     println!("解析成功，记录ID：{}。", record_ret["RecordId"]);
 
