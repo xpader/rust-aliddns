@@ -14,10 +14,8 @@ use dns_lookup::lookup_host;
 use hmacsha1::hmac_sha1;
 use json::JsonValue;
 use rand::prelude::*;
-use urlencoding::encode as url_encode;
-
 use serde::Deserialize;
-use core::panicking::panic;
+use urlencoding::encode as url_encode;
 
 struct Aliyun {
     api_id: String,
