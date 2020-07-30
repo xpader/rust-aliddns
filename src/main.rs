@@ -1,22 +1,22 @@
 extern crate base64;
 extern crate chrono;
-extern crate crypto;
 extern crate json;
 
 use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::fs::read_to_string;
 use std::process::exit;
 
 use base64::encode as base64_encode;
 use chrono::prelude::*;
-use crypto::hmac::Hmac;
-use crypto::mac::Mac;
-use crypto::sha1::Sha1;
 use curl::easy::Easy;
 use dns_lookup::lookup_host;
+use hmacsha1::hmac_sha1;
 use json::JsonValue;
 use rand::prelude::*;
 use urlencoding::encode as url_encode;
+
+use serde::Deserialize;
 
 struct Aliyun {
     api_id: String,
@@ -49,15 +49,12 @@ impl Aliyun {
 
         let message = format!("{}&%2F&{}", method, Aliyun::ali_encode(&sign_str));
 
-        //HMAC, Sha1 签名
-        let sha1 = Sha1::new();
+        //HMAC-Sha1 签名
         let mut akey = String::from(&self.api_key);
         akey.push_str("&");
-        let mut hmac = Hmac::new(sha1, akey.as_bytes());
-        hmac.input(&message.as_bytes());
-        let res = hmac.result();
+        let code = hmac_sha1(akey.as_bytes(), message.as_bytes());
 
-        base64_encode(res.code())
+        base64_encode(code)
     }
 
     fn get_request_data<'a>(&self, data: &HashMap<&'a str, String>) -> HashMap<&'a str, String> {
@@ -191,13 +188,33 @@ fn get_current_ip() -> String {
     ip.trim().to_string()
 }
 
+#[derive(Deserialize)]
+struct Config {
+    access_key_id: String,
+    access_key_secret: String,
+    domain: String,
+    domain_sub: String,
+    ttl: Option<u32>
+}
+
 fn main() {
-    let api_id = String::from("");
-    let api_key = String::from("");
-    let domain = String::from("vgot.net");
-    let domain_sub = String::from("hols");
-    let ttl: u32 = 600; //600-86400 的范围
-    let domain_full = format!("{}.{}", domain_sub, domain);
+    let config: Config;
+
+    {
+        let config_content = read_to_string("config.toml");
+        match config_content {
+            Ok(toml) => {
+                config = toml::from_str(toml.as_str()).unwrap();
+            },
+            Err(e) => panic!(e)
+        };
+    }
+
+    let domain_full = format!("{}.{}", config.domain_sub, config.domain);
+    let ttl = match config.ttl {
+        Some(v) => v,
+        None => 600
+    };
 
     let current_ip = get_current_ip();
     println!("当前公网IP: {}", current_ip);
@@ -209,7 +226,7 @@ fn main() {
     match resolve {
         Ok(ips) => {
             let mut match_current = false;
-            println!("{:?}", ips);
+            println!("{} 解析结果： {:?}", domain_full, ips);
 
             for ip in ips {
                 if ip.to_string().eq(&current_ip) {
@@ -219,15 +236,15 @@ fn main() {
             }
 
             if match_current {
-                println!("当前 IP {} 解析一致，无变化！", current_ip);
+                println!("域名解析一致，程序结束！");
                 exit(0);
             }
         },
-        Err(e) => println!("未找到解析记录： {}，继续..", e.to_string())
+        Err(e) => println!("{}，继续..", e.to_string())
     }
 
     //解析不一致再查当前设置是否一致
-    let ali = Aliyun {api_id, api_key};
+    let ali = Aliyun {api_id: config.access_key_id, api_key: config.access_key_secret};
     let ret = ali.get_record_id(&domain_full);
 
     let total_count = ret["TotalCount"].as_usize().unwrap();
@@ -238,16 +255,16 @@ fn main() {
         // let current_setting: Ipv4Addr = setting_ip.parse().unwrap();
 
         if setting_ip.eq(&current_ip) {
-            println!("当前 IP {} 解析设置一致，无变化！", current_ip);
+            println!("当前 IP {} 解析设置一致，程序结束！", current_ip);
             exit(0);
         }
 
         println!("当前 IP {} 与解析设置 {} 不一致，需更新！", current_ip, setting_ip);
-        ali.update_record(&domain, &domain_sub, &current_ip, ttl)
+        ali.update_record(&config.domain, &config.domain_sub, &current_ip, ttl)
 
     } else {
-        println!("没有找到 {} 的解析记录，添加新记录。", domain_sub);
-        ali.add_record(&domain, &domain_sub, &current_ip, ttl)
+        println!("没有找到 {} 的解析记录，添加新记录。", domain_full);
+        ali.add_record(&config.domain, &config.domain_sub, &current_ip, ttl)
     };
 
     if !record_ret["Code"].is_null() {

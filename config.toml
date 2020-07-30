@@ -1,0 +1,8 @@
+# API 密钥设置
+access_key_id = ""
+access_key_secret = ""
+
+# 域名设置
+domain = "example.com"
+domain_sub = "www2"
+#ttl = 600
