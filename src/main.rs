@@ -141,10 +141,10 @@ impl Aliyun {
         self.get(&data)
     }
 
-    pub fn update_record(&self, domain: &String, sub: &String, ip: &String, ttl: u32) -> JsonValue {
+    pub fn update_record(&self, sub: &String, record_id: &String, ip: &String, ttl: u32) -> JsonValue {
         let mut data: HashMap<&str, String> = HashMap::new();
         data.insert("Action", "UpdateDomainRecord".to_string());
-        data.insert("DomainName", domain.clone());
+        data.insert("RecordId", record_id.clone());
         data.insert("RR", sub.clone());
         data.insert("Type", "A".to_string());
         data.insert("Value", ip.clone());
@@ -273,7 +273,8 @@ fn main() {
         }
 
         println!("当前 IP {} 与解析设置 {} 不一致，需更新！", current_ip, setting_ip);
-        ali.update_record(&config.domain, &config.domain_sub, &current_ip, ttl)
+        let record_id = record["RecordId"].to_string();
+        ali.update_record(&config.domain_sub, &record_id, &current_ip, ttl)
 
     } else {
         println!("没有找到 {} 的解析记录，添加新记录。", domain_full);
